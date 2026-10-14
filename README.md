@@ -35,8 +35,9 @@ npm run dev                                             # http://localhost:5173
 
 **Tests:** `cd backend && python -m pytest` (in-memory SQLite, OCR mocked: no Paddle models needed).
 
-PaddleOCR downloads its models on first use, so the first **Run OCR** click is slow. If paddle is not installed
-the endpoint returns 503 with an explanatory message and everything else keeps working.
+PaddleOCR models are warmed during API startup so the first **Run OCR** request does not time out while
+models download. Keep `OCR_WARMUP=true` in deployment (the default). If PaddleOCR is unavailable, the
+API logs the warmup failure and the endpoint returns 503 with an explanatory message.
 
 ## Safety rules and where they are enforced
 | Rule | Enforcement |

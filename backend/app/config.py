@@ -43,6 +43,10 @@ class Settings:
     def UPLOAD_DIR(self) -> Path:
         return Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads"))).resolve()
 
+    @property
+    def OCR_WARMUP(self) -> bool:
+        return os.getenv("OCR_WARMUP", "true").strip().lower() in ("1", "true", "yes", "on")
+
     MAX_UPLOAD_BYTES = 10 * 1024 * 1024
     EXPIRY_WARNING_DAYS = 90
 

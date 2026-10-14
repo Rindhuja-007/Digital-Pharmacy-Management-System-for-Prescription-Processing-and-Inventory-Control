@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -9,12 +10,18 @@ from .config import settings
 from .database import init_db
 from .errors import AppError
 from .routers import alerts, auth, inventory, medicines, reports, suppliers, transactions, prescriptions
+from .services.ocr import _get_engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    if settings.OCR_WARMUP:
+        try:
+            _get_engine()
+        except AppError:
+            logging.getLogger("pharmacare").exception("OCR warmup failed; OCR requests will return an error")
     yield
 
 

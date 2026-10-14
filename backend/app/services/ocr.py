@@ -1,5 +1,6 @@
 """PaddleOCR wrapper. The engine is loaded lazily on first use (model download/startup is slow).
 Tests monkeypatch `run_ocr`, so they never need Paddle models."""
+import os
 import threading
 from inspect import signature
 from pathlib import Path
@@ -16,6 +17,7 @@ def _get_engine():
     with _load_lock:
         if _engine is None:
             try:
+                os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
                 import paddle
 
                 paddle.set_flags({
@@ -41,7 +43,7 @@ def _get_engine():
                     options.update(
                         use_doc_orientation_classify=False,
                         use_doc_unwarping=False,
-                        use_textline_orientation=True,
+                        use_textline_orientation=False,
                         enable_mkldnn=False,
                     )
                 _engine = PaddleOCR(**options)
