@@ -1,6 +1,7 @@
 """PaddleOCR wrapper. The engine is loaded lazily on first use (model download/startup is slow).
 Tests monkeypatch `run_ocr`, so they never need Paddle models."""
 import threading
+from inspect import signature
 from pathlib import Path
 
 from ..errors import AppError
@@ -17,7 +18,10 @@ def _get_engine():
             try:
                 import paddle
 
-                paddle.set_flags({"FLAGS_use_mkldnn": False})
+                paddle.set_flags({
+                    "FLAGS_use_mkldnn": False,
+                    "FLAGS_use_onednn": False,
+                })
 
                 from paddleocr import PaddleOCR
             except ImportError as e:
@@ -26,11 +30,27 @@ def _get_engine():
                     "OCR engine is not installed (pip install paddlepaddle paddleocr)",
                 ) from e
 
-            _engine = PaddleOCR(
-                use_angle_cls=True,
-                lang="en",
-                enable_mkldnn=False,
-            )
+            try:
+                # PaddleOCR 3.x renamed the orientation options and no longer
+                # accepts the 2.x constructor arguments.
+                options = {"lang": "en"}
+                parameters = signature(PaddleOCR).parameters
+                if "use_angle_cls" in parameters:
+                    options.update(use_angle_cls=True, enable_mkldnn=False)
+                else:
+                    options.update(
+                        use_doc_orientation_classify=False,
+                        use_doc_unwarping=False,
+                        use_textline_orientation=True,
+                        enable_mkldnn=False,
+                    )
+                _engine = PaddleOCR(**options)
+            except Exception as e:
+                raise AppError(
+                    503,
+                    "OCR engine could not be started. Check that the PaddleOCR models "
+                    "are available to the deployment.",
+                ) from e
     return _engine
 
 def _collect(result) -> tuple[list[str], list[float]]:
@@ -54,11 +74,17 @@ def _collect(result) -> tuple[list[str], list[float]]:
 def run_ocr(image_path: str | Path) -> tuple[str, float]:
     """Returns (text joined by newlines, mean confidence as a percentage 0-100)."""
     engine = _get_engine()
-    with _infer_lock:
-        if hasattr(engine, "predict"):
-            result = engine.predict(str(image_path))
-        else:
-            result = engine.ocr(str(image_path), cls=True)
+    try:
+        with _infer_lock:
+            if hasattr(engine, "predict"):
+                result = engine.predict(str(image_path))
+            else:
+                result = engine.ocr(str(image_path), cls=True)
+    except Exception as e:
+        raise AppError(
+            503,
+            "OCR could not process this image. Check the image and OCR service logs.",
+        ) from e
     texts, confs = _collect(result)
     mean = round(sum(confs) / len(confs) * 100, 2) if confs else 0.0
     return "\n".join(texts), mean
